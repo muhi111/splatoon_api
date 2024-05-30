@@ -5,7 +5,7 @@ def get_session_token():
 	login_url,session_token_code_verifier = gen_url.getNSOLogin()
 	print(login_url)
 	session_url = input(">")
-	session_token_code = re.search("de=(.*)&", session_url).group(1)
+	session_token_code = re.search("code=(.*)&state", session_url).group(1)
 	url = "https://accounts.nintendo.com/connect/1.0.0/api/session_token"
 	headers = {
 		"Host" : "accounts.nintendo.com",
@@ -120,11 +120,13 @@ def get_bulllet_token(gtoken):
 def api_test(gtokne,bullet_token):
 	url = "https://api.lp1.av5ja.srv.nintendo.net/api/graphql"
 	body = {
-		"variables": {},
+		"variables": {
+			"naCountry": "JP"
+		},
 		"extensions": {
 			"persistedQuery": {
 				"version": 1,
-				"sha256Hash": "0d90c7576f1916469b2ae69f64292c02"
+				"sha256Hash": "51fc56bbf006caf37728914aa8bc0e2c86a80cf195b4d4027d6822a3623098a8"
 			}
 		}
 	}
@@ -141,8 +143,8 @@ def api_test(gtokne,bullet_token):
 
 
 if __name__ == "__main__":
-	X_Web_View_Ver = "4.0.0-d5178440"
-	X_ProductVersion = "2.5.2"
+	X_Web_View_Ver = "6.0.0-2ba8cb04"
+	X_ProductVersion = "2.10.0"
 	access_token,id_token = get_access_token(get_session_token())
 	print("----------------------------")
 	gtoken = get_gtoken(get_login(access_token,id_token))
