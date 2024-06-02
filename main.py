@@ -1,121 +1,8 @@
-import gen_url
-import requests,re,json,time,sys
+import cache_token, gen_token
+import requests, json, time, sys, json
 
-def get_session_token():
-	login_url,session_token_code_verifier = gen_url.getNSOLogin()
-	print(login_url)
-	session_url = input(">")
-	session_token_code = re.search("code=(.*)&state", session_url).group(1)
-	url = "https://accounts.nintendo.com/connect/1.0.0/api/session_token"
-	headers = {
-		"Host" : "accounts.nintendo.com",
-		"Content-Type" : "application/json",
-		"Accept" : "application/json"
-	}
-	body = {
-		"session_token_code" : session_token_code,
-		"session_token_code_verifier" : session_token_code_verifier,
-		"client_id" : "71b963c1b7b6d119"
-	}
-	response = requests.post(url, headers=headers, json=body)
-	return json.loads(response.text)["session_token"]
-
-def get_access_token(session_token):
-	url = "https://accounts.nintendo.com/connect/1.0.0/api/token"
-	headers = {
-		"Host" : "accounts.nintendo.com",
-		"Content-Type" : "application/json",
-		"Accept" : "application/json"
-	}
-	body = {
-		"session_token": session_token,
-		"client_id": "71b963c1b7b6d119",
-		"grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer-session-token"
-	}
-	response = requests.post(url, headers=headers, json=body)
-	return json.loads(response.text)["access_token"], json.loads(response.text)["id_token"]
-
-def get_f(id_token,hash_method):
-	url = "https://api.imink.app/f"
-	body = {
-		"token": id_token,
-		"hash_method": hash_method
-	}
-	response = requests.post(url, json=body)
-	if response.status_code // 100 != 2:
-		print("error occur in generating f")
-		print("check \"https://status.imink.app/\"")
-		sys.exit()
-	return {
-		"f" : json.loads(response.text)["f"],
-		"timestmp" :  json.loads(response.text)["timestamp"],
-		"requestId" : json.loads(response.text)["request_id"]
-	}
-
-def get_me(access_token):
-	url = "https://api.accounts.nintendo.com/2.0.0/users/me"
-	headers = {
-		"Host" : "api.accounts.nintendo.com",
-		"Authorization" : f"Bearer {access_token}",
-		"Content-Type" : "application/json"
-	}
-	response = requests.get(url, headers=headers)
-	user_info = json.loads(response.text)
-	return user_info["language"],user_info["country"],user_info["birthday"]
-
-def get_login(access_token,id_token):
-	f_param = get_f(id_token,1)
-	url = "https://api-lp1.znc.srv.nintendo.net/v3/Account/Login"
-	user_lang, user_country, user_birthday = get_me(access_token)
-	body = {
-		"parameter" : {
-			"f" : f_param["f"],
-			"language" : user_lang,
-			"naBirthday" : user_birthday,
-			"naCountry" : user_country,
-			"naIdToken" : id_token,
-			"timestamp" : f_param["timestmp"],
-			"requestId" : f_param["requestId"]
-			}
-	}
-	headers = {
-		"X-ProductVersion" : X_ProductVersion,
-		"Host" : "api-lp1.znc.srv.nintendo.net",
-		"X-Platform" : "iOS"
-	}
-	response = requests.post(url, headers=headers, json=body)
-	return json.loads(response.text)["result"]["webApiServerCredential"]["accessToken"]
-
-def get_gtoken(access_token):
-	f_param = get_f(access_token,2)
-	url = "https://api-lp1.znc.srv.nintendo.net/v2/Game/GetWebServiceToken"
-	body = {
-		"parameter" : {
-			"f" : f_param["f"],
-			"timestamp" : f_param["timestmp"],
-			"requestId" : f_param["requestId"],
-			"registrationToken" : access_token,
-			"id" :  4834290508791808
-			}
-	}
-	headers = {
-		"X-Platform" : "iOS",
-		"X-ProductVersion" : X_ProductVersion,
-		"Authorization" : f"Bearer {access_token}"
-	}
-	response = requests.post(url, headers=headers, json=body)
-	return json.loads(response.text)["result"]["accessToken"]
-
-def get_bulllet_token(gtoken):
-	url = "https://api.lp1.av5ja.srv.nintendo.net/api/bullet_tokens"
-	headers = {
-		"X-Web-View-Ver" : X_Web_View_Ver
-	}
-	cookies = {
-		"_gtoken": gtoken,
-	}
-	response = requests.post(url, headers=headers, cookies=cookies)
-	return json.loads(response.text)["bulletToken"]
+X_Web_View_Ver = "6.0.0-2ba8cb04"
+X_ProductVersion = "2.10.0"
 
 def api_test(gtokne,bullet_token):
 	url = "https://api.lp1.av5ja.srv.nintendo.net/api/graphql"
@@ -126,7 +13,8 @@ def api_test(gtokne,bullet_token):
 		"extensions": {
 			"persistedQuery": {
 				"version": 1,
-				"sha256Hash": "51fc56bbf006caf37728914aa8bc0e2c86a80cf195b4d4027d6822a3623098a8"
+				# 直近50戦の情報を取得
+				"sha256Hash": "58bf17200ca97b55d37165d44902067b617d635e9c8e08e6721b97e9421a8b67"
 			}
 		}
 	}
@@ -139,14 +27,47 @@ def api_test(gtokne,bullet_token):
 		"_gtoken": gtokne,
 	}
 	response = requests.post(url, headers=headers, cookies=cookies, json=body)
-	return json.loads(response.text)
+	return response.status_code, response.text
 
+def print_info(response):
+	summary = response["data"]["latestBattleHistories"]["summary"]
+	killAverage = round(summary["killAverage"], 2)
+	deathAverage = round(summary["deathAverage"], 2)
+	assistAverage = round(summary["assistAverage"], 2)
+	print("----------------------------")
+	print(f"battle summary:")
+	print(f"{summary["win"]}勝{summary["lose"]}敗")
+	print(f"{summary["perUnitTimeMinute"]}分あたり {killAverage}キル {deathAverage}デス {assistAverage}アシスト")
+	history = response["data"]["latestBattleHistories"]["historyGroups"]["nodes"][0]["historyDetails"]["nodes"]
+	for i in range(len(history)):
+		print("----------------------------")
+		print(f"mode: {history[i]["vsMode"]["mode"]}")
+		print(f"rule: {history[i]["vsRule"]["name"]}")
+		print(f"stage: {history[i]["vsStage"]["name"]}")
+		print(f"weapon: {history[i]["player"]["weapon"]["name"]}")
+		print(f"result: {history[i]["judgement"]}")
+		if history[i]["myTeam"]["result"] is None:
+			print(f"paint: NULL")
+		elif history[i]["myTeam"]["result"]["score"] is None:
+			print(f"paintPoint: {history[i]["myTeam"]["result"]["paintPoint"]}")
+		else:
+			print(f"score: {history[i]["myTeam"]["result"]["score"]}")
+		print(f"knockout: {history[i]["knockout"]}")
 
 if __name__ == "__main__":
-	X_Web_View_Ver = "6.0.0-2ba8cb04"
-	X_ProductVersion = "2.10.0"
-	access_token,id_token = get_access_token(get_session_token())
+	data = cache_token.load_data()
+	if (data is not None) and (time.time() - data["timestamp"].timestamp() < 21600):
+		status_code, response = api_test(data["gtoken"], data["bullet_token"])
+		if (status_code == 200):
+			print_info(json.loads(response))
+			sys.exit()
+	access_token,id_token = gen_token.get_access_token(gen_token.get_session_token())
 	print("----------------------------")
-	gtoken = get_gtoken(get_login(access_token,id_token))
-	bullet_token = get_bulllet_token(gtoken)
-	print(api_test(gtoken,bullet_token))
+	gtoken = gen_token.get_gtoken(gen_token.get_login(access_token,id_token))
+	bullet_token = gen_token.get_bulllet_token(gtoken)
+	status_code, response = api_test(gtoken,bullet_token)
+	if (status_code != 200):
+		print("API Error")
+		sys.exit()
+	print_info(json.loads(response))
+	cache_token.cache_data(gtoken, bullet_token)

@@ -9,3 +9,4 @@ f値の計算は外部のAPI(imink)に頼っている
 ![image](https://github.com/muhi111/splatoon_api/assets/107345594/c30d2847-8580-4af0-bd93-cbcad5055ebc)
 - コピーしたリンクをコンソールに入力して、enterを押す。
 - 色々なapiが叩けるパラメータが得られてる(はず)。
+- 今は直近50戦の戦績とバトルサマリーを取得するAPIを叩いている
